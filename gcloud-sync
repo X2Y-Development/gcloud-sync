@@ -1,0 +1,323 @@
+#!/usr/bin/env php
+<?php
+/**
+ * @author    X2Y Dev Team
+ * @copyright Copyright (c) X2Y.io, Inc. (https://x2y.io/)
+ * @package   XDEV_Utilities
+ */
+
+if (PHP_SAPI !== 'cli') {
+    echo 'gcloud-sync must be run as a CLI application';
+    exit(1);
+}
+
+/**
+ * Google Cloud Storage Sync
+ */
+class Sync
+{
+    // Magento Versions
+    const M1_VERSION = 1;
+    const M2_VERSION = 2;
+
+    // Magento Configurations
+    const M1_CONFIG = 'app/etc/local.xml';
+    const M2_CONFIG = 'app/etc/env.php';
+
+    // File Sync
+    const ASSETS_FILENAME = 'assets.tgz';
+    const DATABASE_FILENAME = 'database.sql.bz2';
+
+    // Magento Version
+    private $_version;
+
+    // Store Domain
+    private $_domain;
+
+    // Database Variables
+    private $_hostname;
+    private $_username;
+    private $_password;
+    private $_database;
+
+    /**
+     * Sync constructor.
+     */
+    public function __construct()
+    {
+        try {
+            $this->_initializeMagentoVersion();
+            $this->_initializeCredentials();
+            $this->_initializeDomain();
+        } catch (Exception $exception) {
+            echo $exception->getMessage();
+            exit(1);
+        }
+    }
+
+    /**
+     * Resource cleanup
+     */
+    public function __destruct()
+    {
+        // Remove assets archive
+        $filename = self::ASSETS_FILENAME;
+        @unlink($filename);
+
+        // Remove database export
+        $filename = self::DATABASE_FILENAME;
+        @unlink($filename);
+    }
+
+    /**
+     * Process CLI input
+     */
+    public function process()
+    {
+        $options = getopt(
+            't:c::a::d::'
+        );
+
+        if (empty($options)) {
+            echo <<< EOT
+
+gcloud-sync is a simple script which helps automatically create backups of the configuration, assets and database to Google Cloud Storage.
+            
+Usage:
+    -t      Temporary oauth2 token. Get token via: gcloud auth print-access-token
+    -c      Sync env.php or local.xml
+    -a      Sync assets
+    -d      Sync database
+    
+Example:
+    php gcloud-sync -c -a -d -t=ya29.Glx-Byl-vhVow_4e1RW-tp8bp39uMjwRRz-45HrUz-r68vMGohU0qv6FE2vTXQb7ndvdMcvANyeBxSFteV3t2RSJgzG5dyvxz8iIfQfyNKqm9LN1syqwkLKULNhjG
+
+X2Y Development <dev@x2y.io>
+
+
+EOT;
+            exit(0);
+        }
+
+        $token = isset($options['t']) ? $options['t'] : null;
+        if (!isset($token)) {
+            echo "Please provide a valid oauth2 token.";
+            exit(1);
+        }
+
+        // Sync Magento configuration
+        if (isset($options['c'])) {
+            switch ($this->_version) {
+                // Magento 1
+                case self::M1_VERSION:
+                    $this->_sync($token, self::M1_CONFIG);
+                    break;
+
+                // Magento 2
+                case self::M2_VERSION:
+                    $this->_sync($token, self::M2_CONFIG);
+                    break;
+            }
+        }
+
+        // Sync Magento assets
+        if (isset($options['a'])) {
+            $this->_compressAssets();
+            $this->_sync($token, self::ASSETS_FILENAME);
+        }
+
+        // Sync Magento database
+        if (isset($options['d'])) {
+            $this->_exportDatabase();
+            $this->_sync($token, self::DATABASE_FILENAME);
+        }
+    }
+
+    /**
+     * Initialize Magento version
+     *
+     * @throws Exception
+     */
+    private function _initializeMagentoVersion()
+    {
+        switch (true) {
+            // Magento 1
+            case file_exists(self::M1_CONFIG):
+                $this->_version = self::M1_VERSION;
+                break;
+
+            // Magento 2
+            case file_exists(self::M2_CONFIG):
+                $this->_version = self::M2_VERSION;
+                break;
+
+            default:
+                throw new Exception('Unable to identify Magento version.');
+        }
+    }
+
+    /**
+     * Initialize database credentials
+     *
+     * @throws Exception
+     */
+    private function _initializeCredentials()
+    {
+        switch ($this->_version) {
+            // Magento 1
+            case self::M1_VERSION:
+                $config = simplexml_load_file(self::M1_CONFIG);
+
+                $this->_hostname = $config->global->resources->default_setup->connection->host->__toString();
+                $this->_username = $config->global->resources->default_setup->connection->username->__toString();
+                $this->_password = $config->global->resources->default_setup->connection->password->__toString();
+                $this->_database = $config->global->resources->default_setup->connection->dbname->__toString();
+                break;
+
+            // Magento 2
+            case self::M2_VERSION:
+                $config = include self::M2_CONFIG;
+
+                $this->_hostname = $config['db']['connection']['default']['host'];
+                $this->_username = $config['db']['connection']['default']['username'];
+                $this->_password = $config['db']['connection']['default']['password'];
+                $this->_database = $config['db']['connection']['default']['dbname'];
+                break;
+
+            default:
+                throw new Exception('Unable to identify Magento version during credentials initialization.');
+        }
+
+        // Initialization check
+        if (!isset($this->_hostname) ||
+            !isset($this->_username) ||
+            !isset($this->_password) ||
+            !isset($this->_database)) {
+
+            throw new Exception('Database credentials are invalid. Please check configuration file.');
+        }
+    }
+
+    /**
+     * Initialize domain extraction
+     *
+     * @throws Exception
+     */
+    private function _initializeDomain()
+    {
+        $dsn = "mysql:host={$this->_hostname};dbname={$this->_database}";
+        $pdo = new PDO($dsn, $this->_username, $this->_password);
+
+        $statement = $pdo->prepare("SELECT value FROM core_config_data WHERE path = :path AND scope = :scope AND scope_id = :scope_id");
+        $statement->bindValue(':path', 'web/unsecure/base_url', PDO::PARAM_STR);
+        $statement->bindValue(':scope', 'default', PDO::PARAM_STR);
+        $statement->bindValue(':scope_id', 0, PDO::PARAM_INT);
+        $statement->execute();
+
+        $result = $statement->fetch(PDO::FETCH_ASSOC);
+
+        $baseUrl = array_pop($result);
+        $url = parse_url($baseUrl);
+
+        $this->_domain = $url['host'];
+
+        if (!isset($this->_domain)) {
+            throw new Exception('Unable to extract domain from database.');
+        }
+    }
+
+    /**
+     * Export Database
+     */
+    private function _exportDatabase()
+    {
+        $filename = self::DATABASE_FILENAME;
+
+        echo "Exporting Database\n";
+        echo system("time mysqldump --single-transaction -h {$this->_hostname} -u{$this->_username} -p{$this->_password} {$this->_database} | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | bzip2 -c > {$filename}");
+    }
+
+    /**
+     * Compress Assets
+     */
+    private function _compressAssets()
+    {
+        $filename = self::ASSETS_FILENAME;
+
+        switch ($this->_version) {
+            // Magento 1
+            case self::M1_VERSION:
+                echo "Compressing Assets\n";
+                echo system("time tar zcf {$filename} media/");
+                break;
+
+            // Magento 2
+            case self::M2_VERSION:
+                echo "Compressing Assets\n";
+                echo system("time tar zcf {$filename} pub/media/");
+                break;
+        }
+    }
+
+    /**
+     * Sync resources to Google Cloud Storage
+     *
+     * @param $token
+     * @param $file
+     */
+    private function _sync($token, $file)
+    {
+        // TODO fix upload issues with gzip and bzip2 files
+        /*
+        $filename = explode('/', $file);
+        $filename = array_pop($filename);
+
+        $objectName = $this->_domain . '/' . $filename;
+
+        // TODO make bucket specified via CLI arguments
+        $command = <<< EOT
+curl -X POST --data-binary {$file} \
+-H "Authorization: Bearer {$token}" \
+-H "Content-Type: application/gzip" \
+"https://www.googleapis.com/upload/storage/v1/b/[BUCKET]/o?uploadType=media&name=$objectName"
+EOT;
+
+        system($command);
+        */
+
+        /*
+        $filesize = filesize($file);
+
+
+        // TODO implement uploadType=resumable
+        // https://medium.com/google-cloud/google-cloud-storage-signedurl-resumable-upload-with-curl-74f99e41f0a2
+        $url = "https://www.googleapis.com/upload/storage/v1/b/[BUCKET]/o?uploadType=media&name={$objectName}";
+
+        $ch = curl_init();
+
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        $post = array(
+            'file' => '@' . realpath($file)
+        );
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+        curl_setopt($ch, CURLOPT_POST, 1);
+
+        $headers = array();
+        $headers[] = "Authorization: Bearer {$token}";
+        $headers[] = "Content-Type: application/octet-stream";
+        //$headers[] = "Content-Length: 0";
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+        $result = curl_exec($ch);
+        if (curl_errno($ch)) {
+            echo 'Error:' . curl_error($ch);
+        }
+        curl_close($ch);
+        */
+    }
+}
+
+$sync = new Sync();
+$sync->process();
+
