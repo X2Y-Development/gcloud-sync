@@ -40,6 +40,10 @@ class Sync
     private $_password;
     private $_database;
 
+    // Google Cloud Variables
+    private $_token;
+    private $_bucket;
+
     /**
      * Sync constructor.
      */
@@ -75,22 +79,25 @@ class Sync
     public function process()
     {
         $options = getopt(
-            't:c::a::d::'
+            't:c::a::d::b:'
         );
 
         if (empty($options)) {
             echo <<< EOT
 
-gcloud-sync is a simple script which helps automatically create backups of the configuration, assets and database to Google Cloud Storage.
+gcloud-sync is a simple utility that will automatically create a backup of a Magento database, media directory and configuration from a host to Google Cloud Storage.
+
+Get the latest version at https://github.com/X2Y-Development/gcloud-sync
             
 Usage:
-    -t      Temporary oauth2 token. Get token via: gcloud auth print-access-token
-    -c      Sync env.php or local.xml
-    -a      Sync assets
-    -d      Sync database
+    -t      Google Account OAuth2 token
+    -b      Google Cloud Storage bucket name
+    -c      Sync Magento configuration files
+    -a      Sync Magento media assets
+    -d      Sync Magento database
     
 Example:
-    php gcloud-sync -c -a -d -t=ya29.Glx-Byl-vhVow_4e1RW-tp8bp39uMjwRRz-45HrUz-r68vMGohU0qv6FE2vTXQb7ndvdMcvANyeBxSFteV3t2RSJgzG5dyvxz8iIfQfyNKqm9LN1syqwkLKULNhjG
+    php gcloud-sync -c -a -d -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
 
 X2Y Development <dev@x2y.io>
 
@@ -101,21 +108,29 @@ EOT;
 
         $token = isset($options['t']) ? $options['t'] : null;
         if (!isset($token)) {
-            echo "Please provide a valid oauth2 token.";
+            echo "Please provide a valid oauth2 token.\n";
             exit(1);
         }
+        $this->_token = $token;
+
+        $bucket = isset($options['b']) ? $options['b'] : null;
+        if (!isset($bucket)) {
+            echo "Please provide a valid storage bucket name.\n";
+            exit(1);
+        }
+        $this->_bucket = $bucket;
 
         // Sync Magento configuration
         if (isset($options['c'])) {
             switch ($this->_version) {
                 // Magento 1
                 case self::M1_VERSION:
-                    $this->_sync($token, self::M1_CONFIG);
+                    $this->_sync(self::M1_CONFIG);
                     break;
 
                 // Magento 2
                 case self::M2_VERSION:
-                    $this->_sync($token, self::M2_CONFIG);
+                    $this->_sync(self::M2_CONFIG);
                     break;
             }
         }
@@ -123,13 +138,13 @@ EOT;
         // Sync Magento assets
         if (isset($options['a'])) {
             $this->_compressAssets();
-            $this->_sync($token, self::ASSETS_FILENAME);
+            $this->_sync(self::ASSETS_FILENAME);
         }
 
         // Sync Magento database
         if (isset($options['d'])) {
             $this->_exportDatabase();
-            $this->_sync($token, self::DATABASE_FILENAME);
+            $this->_sync(self::DATABASE_FILENAME);
         }
     }
 
@@ -262,32 +277,27 @@ EOT;
     /**
      * Sync resources to Google Cloud Storage
      *
-     * @param $token
-     * @param $file
+     * @param $resource
      */
-    private function _sync($token, $file)
+    private function _sync($resource)
     {
-        // TODO fix upload issues with gzip and bzip2 files
-        /*
-        $filename = explode('/', $file);
+        $filename = explode('/', $resource);
         $filename = array_pop($filename);
 
         $objectName = $this->_domain . '/' . $filename;
 
-        // TODO make bucket specified via CLI arguments
+        // Working example, using for initial testing
+        // TODO implement via curl_init
         $command = <<< EOT
-curl -X POST --data-binary {$file} \
--H "Authorization: Bearer {$token}" \
+curl -X POST --upload-file {$resource} \
+-H "Authorization: Bearer {$this->_token}" \
 -H "Content-Type: application/gzip" \
-"https://www.googleapis.com/upload/storage/v1/b/[BUCKET]/o?uploadType=media&name=$objectName"
+"https://www.googleapis.com/upload/storage/v1/b/{$this->_bucket}/o?uploadType=media&name=$objectName"
 EOT;
-
         system($command);
-        */
 
         /*
-        $filesize = filesize($file);
-
+        $filesize = filesize($resource);
 
         // TODO implement uploadType=resumable
         // https://medium.com/google-cloud/google-cloud-storage-signedurl-resumable-upload-with-curl-74f99e41f0a2

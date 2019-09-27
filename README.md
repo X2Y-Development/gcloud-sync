@@ -8,37 +8,43 @@ Login using a Google Account:
 ```
 $ gcloud auth login `ACCOUNT`
 ```
-Set default project:
-```
-$ gcloud config set project x2y-development
-```
-or create a new one. [Documentation](https://cloud.google.com/resource-manager/docs/creating-managing-projects).
 
-Print Google Account authentication token:
+Create a [Google Cloud Project](https://cloud.google.com/resource-manager/docs/creating-managing-projects):
+```
+$ gcloud projects create [PROJECT_NAME]
+```
+
+Create a [Google Cloud Storage Bucket](https://cloud.google.com/storage/docs/creating-buckets#storage-create-bucket-gsutil):
+```
+$ gsutil mb -c nearline -p [PROJECT_NAME] gs://[BUCKET_NAME]
+```
+
+Print temporary Google Account `[OAUTH2_TOKEN]`:
 ```
 $ gcloud auth print-access-token
 ```
 
 ## Host Setup
-Log into a host, navigate to Magento web root directory and download the utility: 
+SSH into a host, navigate to Magento web root directory and download the utility: 
 ```
 $ curl https://raw.githubusercontent.com/X2Y-Development/gcloud-sync/master/gcloud-sync --output gcloud-sync
 ```
 
 ## Usage
-```
-$ php gcloud 
+``` 
+$ php gcloud-sync 
 ```
 
 ```
 Usage:
-    -t      Temporary oauth2 token.
-    -c      Sync env.php or local.xml
-    -a      Sync assets
-    -d      Sync database
+    -t      Google Account OAuth2 token
+    -b      Google Cloud Storage bucket name
+    -c      Sync Magento configuration files
+    -a      Sync Magento media assets
+    -d      Sync Magento database
     
 Example:
-    php gcloud-sync -c -a -d -t=ya29.Glx-Byl-vhVow_4e1RW-tp8bp39uMjwRRz-45HrUz-r68vMGohU0qv6FE2vTXQb7ndvdMcvANyeBxSFteV3t2RSJgzG5dyvxz8iIfQfyNKqm9LN1syqwkLKULNhjG
+    php gcloud-sync -c -a -d -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
 
 X2Y Development <dev@x2y.io>
 ```
