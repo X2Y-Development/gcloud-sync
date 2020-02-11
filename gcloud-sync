@@ -39,6 +39,7 @@ class Sync
     private $_username;
     private $_password;
     private $_database;
+    private $_table_prefix;
 
     // Google Cloud Variables
     private $_token;
@@ -187,6 +188,7 @@ EOT;
                 $this->_username = $config->global->resources->default_setup->connection->username->__toString();
                 $this->_password = $config->global->resources->default_setup->connection->password->__toString();
                 $this->_database = $config->global->resources->default_setup->connection->dbname->__toString();
+                $this->_table_prefix = $config->global->resources->db->table_prefix->__toString();
                 break;
 
             // Magento 2
@@ -197,6 +199,7 @@ EOT;
                 $this->_username = $config['db']['connection']['default']['username'];
                 $this->_password = $config['db']['connection']['default']['password'];
                 $this->_database = $config['db']['connection']['default']['dbname'];
+                $this->_table_prefix = $config['db']['table_prefix'];
                 break;
 
             default:
@@ -223,7 +226,9 @@ EOT;
         $dsn = "mysql:host={$this->_hostname};dbname={$this->_database}";
         $pdo = new PDO($dsn, $this->_username, $this->_password);
 
-        $statement = $pdo->prepare("SELECT value FROM core_config_data WHERE path = :path AND scope = :scope AND scope_id = :scope_id");
+        $configTable = "{$this->_table_prefix}core_config_data";
+        
+        $statement = $pdo->prepare("SELECT value FROM {$configTable} WHERE path = :path AND scope = :scope AND scope_id = :scope_id");
         $statement->bindValue(':path', 'web/unsecure/base_url', PDO::PARAM_STR);
         $statement->bindValue(':scope', 'default', PDO::PARAM_STR);
         $statement->bindValue(':scope_id', 0, PDO::PARAM_INT);
@@ -283,48 +288,17 @@ EOT;
     {
         $filename = explode('/', $resource);
         $filename = array_pop($filename);
+        $contentType = mime_content_type($filename);
 
         $objectName = $this->_domain . '/' . $filename;
 
-        // Working example, using for initial testing
-        // TODO implement via curl_init
         $command = <<< EOT
 curl -X POST --upload-file {$resource} \
 -H "Authorization: Bearer {$this->_token}" \
--H "Content-Type: application/gzip" \
+-H "Content-Type: {$contentType}" \
 "https://www.googleapis.com/upload/storage/v1/b/{$this->_bucket}/o?uploadType=media&name=$objectName"
 EOT;
         system($command);
-
-        /*
-        $filesize = filesize($resource);
-
-        // TODO implement uploadType=resumable
-        // https://medium.com/google-cloud/google-cloud-storage-signedurl-resumable-upload-with-curl-74f99e41f0a2
-        $url = "https://www.googleapis.com/upload/storage/v1/b/[BUCKET]/o?uploadType=media&name={$objectName}";
-
-        $ch = curl_init();
-
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        $post = array(
-            'file' => '@' . realpath($file)
-        );
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-        curl_setopt($ch, CURLOPT_POST, 1);
-
-        $headers = array();
-        $headers[] = "Authorization: Bearer {$token}";
-        $headers[] = "Content-Type: application/octet-stream";
-        //$headers[] = "Content-Length: 0";
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-        $result = curl_exec($ch);
-        if (curl_errno($ch)) {
-            echo 'Error:' . curl_error($ch);
-        }
-        curl_close($ch);
-        */
     }
 }
 
