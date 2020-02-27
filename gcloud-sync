@@ -24,6 +24,16 @@ class Sync
     const M1_CONFIG = 'app/etc/local.xml';
     const M2_CONFIG = 'app/etc/env.php';
 
+    // n98-magerun
+    const MAGERUN_EXECUTABLE = [
+        1 => 'shell/n98-magerun.phar',
+        2 => 'bin/n98-magerun2.phar'
+    ];
+    const MAGERUN_GET_COMMAND = [
+        1 => 'wget https://files.magerun.net/n98-magerun.phar -P shell/',
+        2 => 'wget https://files.magerun.net/n98-magerun2.phar -P bin/'
+    ];
+
     // File Sync
     const ASSETS_FILENAME = 'assets.tgz';
     const DATABASE_FILENAME = 'database.sql.bz2';
@@ -251,10 +261,34 @@ EOT;
      */
     private function _exportDatabase()
     {
-        $filename = self::DATABASE_FILENAME;
+        $compressedDbName = self::DATABASE_FILENAME;
 
         echo "Exporting Database\n";
-        echo system("time mysqldump --single-transaction -h {$this->_hostname} -u{$this->_username} -p{$this->_password} {$this->_database} | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | bzip2 -c > {$filename}");
+        $mageRun = $this->getMageRunFilePath();
+
+        system("{$mageRun} db:dump --strip=\"@development\" --quiet database.sql;");
+        system("sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' database.sql | bzip2 -c > {$compressedDbName};");
+        system("rm database.sql;");
+    }
+
+    /**
+     * Get n98-magerun file path
+     * If no such file, it will be downloaded
+     *
+     * @return string n98-magerun file path
+     */
+    private function getMageRunFilePath()
+    {
+        $mageRun = self::MAGERUN_EXECUTABLE[$this->_version];
+
+        if (!file_exists($mageRun)) {
+            echo "Magerun does not exist, downloading...\n";
+            system(self::MAGERUN_GET_COMMAND[$this->_version]);
+        }
+
+        system("chmod +x {$mageRun}");
+
+        return $mageRun;
     }
 
     /**
