@@ -266,7 +266,7 @@ EOT;
         echo "Exporting Database\n";
         $mageRun = $this->getMageRunFilePath();
 
-        system("{$mageRun} db:dump --strip=\"@development\" --quiet database.sql;");
+        system("{$mageRun} db:dump --strip=\"@development\" --exclude=\"core_config_data\" --quiet database.sql;");
         system("sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' database.sql | bzip2 -c > {$compressedDbName};");
         system("rm database.sql;");
     }
