@@ -254,7 +254,7 @@ EOT;
         $filename = self::DATABASE_FILENAME;
 
         echo "Exporting Database\n";
-        echo system("time mysqldump --single-transaction -h {$this->_hostname} -u{$this->_username} -p{$this->_password} {$this->_database} | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | bzip2 -c > {$filename}");
+        echo system("mysqldump --single-transaction -h {$this->_hostname} -u{$this->_username} -p{$this->_password} {$this->_database} | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | bzip2 -c > {$filename}");
     }
 
     /**
@@ -268,13 +268,13 @@ EOT;
             // Magento 1
             case self::M1_VERSION:
                 echo "Compressing Assets\n";
-                echo system("time tar zcf {$filename} media/");
+                echo system("tar zcf {$filename} media/");
                 break;
 
             // Magento 2
             case self::M2_VERSION:
                 echo "Compressing Assets\n";
-                echo system("time tar zcf {$filename} pub/media/");
+                echo system("tar zcf {$filename} pub/media/");
                 break;
         }
     }
