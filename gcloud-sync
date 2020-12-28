@@ -23,10 +23,14 @@ class Sync
     // Magento Configurations
     const M1_CONFIG = 'app/etc/local.xml';
     const M2_CONFIG = 'app/etc/env.php';
+    const M2_CONPOSER_JSON = 'composer.json';
+    const M2_CONPOSER_LOCK = 'composer.lock';
+    const M2_AUTH_JSON = 'auth.json';
 
     // File Sync
     const ASSETS_FILENAME = 'assets.tgz';
     const DATABASE_FILENAME = 'database.sql.bz2';
+    const APP_CODE_FILENAME = 'code.tgz';
 
     // Magento Version
     private $_version;
@@ -80,7 +84,7 @@ class Sync
     public function process()
     {
         $options = getopt(
-            't:c::a::d::b:'
+            't:c::a::d::b:m:'
         );
 
         if (empty($options)) {
@@ -96,9 +100,10 @@ Usage:
     -c      Sync Magento configuration files
     -a      Sync Magento media assets
     -d      Sync Magento database
-    
+    -m      Sync modules from app/code
+
 Example:
-    php gcloud-sync -c -a -d -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
+    php gcloud-sync -c -a -d -m -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
 
 X2Y Development <dev@x2y.io>
 
@@ -121,7 +126,7 @@ EOT;
         }
         $this->_bucket = $bucket;
 
-        // Sync Magento configuration
+        // Sync Magento configuration, sync composer.* files for magento 2
         if (isset($options['c'])) {
             switch ($this->_version) {
                 // Magento 1
@@ -132,6 +137,9 @@ EOT;
                 // Magento 2
                 case self::M2_VERSION:
                     $this->_sync(self::M2_CONFIG);
+                    $this->_sync(self::M2_CONPOSER_JSON);
+                    $this->_sync(self::M2_CONPOSER_LOCK);
+                    $this->_sync(self::M2_AUTH_JSON);
                     break;
             }
         }
@@ -146,6 +154,12 @@ EOT;
         if (isset($options['d'])) {
             $this->_exportDatabase();
             $this->_sync(self::DATABASE_FILENAME);
+        }
+
+        // Sync Magento app/code directory
+        if (isset($options['m'])) {
+            $this->_compressAppCode();
+            $this->_sync(self::APP_CODE_FILENAME);
         }
     }
 
@@ -280,12 +294,29 @@ EOT;
     }
 
     /**
+     * Compress app/code
+     */
+    private function _compressAppCode()
+    {
+        $filename = self::APP_CODE_FILENAME;
+
+        echo "Compressing code\n";
+        echo system("tar zcf {$filename} app/code");
+    }
+
+    /**
      * Sync resources to Google Cloud Storage
      *
      * @param $resource
      */
     private function _sync($resource)
     {
+        if (!file_exists($resource)) {
+            echo "Resouce {$resource} does not exist. Skipping."
+
+            return;
+        }
+
         $filename = explode('/', $resource);
         $filename = array_pop($filename);
         $contentType = mime_content_type($filename);
