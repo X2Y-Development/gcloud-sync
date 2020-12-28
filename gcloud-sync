@@ -312,7 +312,7 @@ EOT;
     private function _sync($resource)
     {
         if (!file_exists($resource)) {
-            echo "Resouce {$resource} does not exist. Skipping."
+            echo "Resouce {$resource} does not exist. Skipping.";
 
             return;
         }
