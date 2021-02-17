@@ -332,8 +332,9 @@ EOT;
         system($command, $resultCode);
 
         $resourceLink = <<< EOT
-curl "https://www.googleapis.com/upload/storage/v1/b/{$this->_bucket}/o?uploadType=media&name=$objectName" \
+curl -vvv -X GET \
 -H "Authorization: Bearer {$this->_token}" \
+"https://storage.googleapis.com/download/storage/v1/b/{$this->_bucket}/o/$objectName?alt=media" \
 --output $filename\n\n
 EOT;
         echo $resourceLink;
