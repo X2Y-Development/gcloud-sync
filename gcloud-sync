@@ -331,15 +331,16 @@ curl -X POST --upload-file {$resource} \
 EOT;
         system($command, $resultCode);
 
-        $objectName = json_encode($objectName);
+        // See https://cloud.google.com/storage/docs/request-endpoints#encoding
+        $objectName = $this->_domain . '%2F' . $filename;
 
         $resourceLink = <<< EOT
-curl -vvv -X GET \
+curl -X GET \
 -H "Authorization: Bearer {$this->_token}" \
-"https://storage.googleapis.com/download/storage/v1/b/{$this->_bucket}/o/$objectName?alt=media" \
---output $filename\n\n
+-o $filename \
+"https://storage.googleapis.com/download/storage/v1/b/{$this->_bucket}/o/$objectName?alt=media"
 EOT;
-        echo $resourceLink;
+        echo $resourceLink . "\n\n";
     }
 }
 
