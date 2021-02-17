@@ -334,7 +334,7 @@ EOT;
         $resourceLink = <<< EOT
 curl "https://www.googleapis.com/upload/storage/v1/b/{$this->_bucket}/o?uploadType=media&name=$objectName" \
 -H "Authorization: Bearer {$this->_token}" \
---output $filename
+--output $filename\n\n
 EOT;
         echo $resourceLink;
     }
