@@ -42,6 +42,7 @@ Usage:
     -c      Sync Magento configuration files
     -a      Sync Magento media assets
     -d      Sync Magento database
+    -m      Sync modules from app/code
     
 Example:
     php gcloud-sync -c -a -d -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
