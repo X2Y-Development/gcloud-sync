@@ -298,10 +298,15 @@ curl -X POST --upload-file {$resource} \
 -H "Content-Type: {$contentType}" \
 "https://www.googleapis.com/upload/storage/v1/b/{$this->_bucket}/o?uploadType=media&name=$objectName"
 EOT;
-        system($command);
+        system($command, $resultCode);
+
+        echo <<< EOT
+curl "https://www.googleapis.com/upload/storage/v1/b/{$this->_bucket}/o?uploadType=media&name=$objectName" \
+-H "Authorization: Bearer {$this->_token}" \
+--output $filename
+EOT;    
     }
 }
 
 $sync = new Sync();
 $sync->process();
-
