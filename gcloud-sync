@@ -331,6 +331,8 @@ curl -X POST --upload-file {$resource} \
 EOT;
         system($command, $resultCode);
 
+        $objectName = json_encode($objectName);
+
         $resourceLink = <<< EOT
 curl -vvv -X GET \
 -H "Authorization: Bearer {$this->_token}" \
