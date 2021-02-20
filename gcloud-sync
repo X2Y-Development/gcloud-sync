@@ -268,7 +268,7 @@ EOT;
         $filename = self::DATABASE_FILENAME;
 
         echo "Exporting Database\n";
-        echo system("mysqldump --single-transaction -h {$this->_hostname} -u{$this->_username} -p{$this->_password} {$this->_database} | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | bzip2 -c > {$filename}");
+        echo system("mysqldump --single-transaction -h {$this->_hostname} -u{$this->_username} --password='{$this->_password}' {$this->_database} | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | bzip2 -c > {$filename}");
     }
 
     /**
