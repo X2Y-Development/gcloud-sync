@@ -24,6 +24,11 @@ Print temporary Google Account `[OAUTH2_TOKEN]`:
 $ gcloud auth print-access-token
 ```
 
+Add bash alias `gcs` to your `~/.bashrc` or `~/.zshrc`, just replace `[BUCKET_NAME]`:
+```
+alias gcs='echo "curl --silent https://raw.githubusercontent.com/X2Y-Development/gcloud-sync/master/gcloud-sync --output gcloud-sync && php gcloud-sync -t=$(gcloud auth print-access-token) -b=[BUCKET_NAME] -c -d -a -m -v && rm -f gcloud-sync"'
+```
+
 ## Host Setup
 SSH into a host, navigate to Magento web root directory and download the utility: 
 ```
