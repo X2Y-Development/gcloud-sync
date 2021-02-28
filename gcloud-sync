@@ -31,6 +31,7 @@ class Sync
     const ASSETS_FILENAME = 'assets.tgz';
     const DATABASE_FILENAME = 'database.sql.bz2';
     const APP_CODE_FILENAME = 'code.tgz';
+    const VEDNOR_FILENAME = 'vendor.tgz';
 
     // Magento Version
     private $_version;
@@ -73,6 +74,14 @@ class Sync
         $filename = self::ASSETS_FILENAME;
         @unlink($filename);
 
+        // Remove app/code export
+        $filename = self::APP_CODE_FILENAME;
+        @unlink($filename);
+
+        // Remove vendor export
+        $filename = self::VEDNOR_FILENAME;
+        @unlink($filename);
+
         // Remove database export
         $filename = self::DATABASE_FILENAME;
         @unlink($filename);
@@ -84,7 +93,7 @@ class Sync
     public function process()
     {
         $options = getopt(
-            't:c::a::d::b:m:'
+            't:c::a::d::b:m:v'
         );
 
         if (empty($options)) {
@@ -100,7 +109,8 @@ Usage:
     -c      Sync Magento configuration files
     -a      Sync Magento media assets
     -d      Sync Magento database
-    -m      Sync modules from app/code
+    -m      Sync Magento app/code resources
+    -v      Sync Magento vendor resources
 
 Example:
     php gcloud-sync -c -a -d -m -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
@@ -110,6 +120,15 @@ X2Y Development <dev@x2y.io>
 
 EOT;
             exit(0);
+        } else {
+            $message = <<< EOT
+   ______________    ____  __  ______     _______  ___   ________
+  / ____/ ____/ /   / __ \/ / / / __ \   / ___/\ \/ / | / / ____/
+ / / __/ /   / /   / / / / / / / / / /   \__ \  \  /  |/ / / 
+/ /_/ / /___/ /___/ /_/ / /_/ / /_/ /   ___/ /  / / /|  / /___ 
+\____/\____/_____/\____/\____/_____/   /____/  /_/_/ |_/\____/                                                                                  
+EOT;
+            echo $message . "\n";
         }
 
         $token = isset($options['t']) ? $options['t'] : null;
@@ -160,6 +179,12 @@ EOT;
         if (isset($options['m'])) {
             $this->_compressAppCode();
             $this->_sync(self::APP_CODE_FILENAME);
+        }
+
+        // Sync Magento vendor directory
+        if (isset($options['v'])) {
+            $this->_compressVendor();
+            $this->_sync(self::VEDNOR_FILENAME);
         }
     }
 
@@ -294,6 +319,22 @@ EOT;
     }
 
     /**
+     * Compress Assets
+     */
+    private function _compressVendor()
+    {
+        $filename = self::VEDNOR_FILENAME;
+
+        switch ($this->_version) {
+            // Magento 2
+            case self::M2_VERSION:
+                echo "Compressing Vendor\n";
+                echo system("tar zcf {$filename} vendor/");
+                break;
+        }
+    }
+
+    /**
      * Compress app/code
      */
     private function _compressAppCode()
@@ -319,28 +360,26 @@ EOT;
 
         $filename = explode('/', $resource);
         $filename = array_pop($filename);
-        $contentType = mime_content_type($filename);
+        $contentType = mime_content_type($resource);
 
         $objectName = $this->_domain . '/' . $filename;
 
         $command = <<< EOT
 curl -X POST --upload-file {$resource} \
+--write-out %{response_code} --silent --output /dev/null \
 -H "Authorization: Bearer {$this->_token}" \
 -H "Content-Type: {$contentType}" \
 "https://www.googleapis.com/upload/storage/v1/b/{$this->_bucket}/o?uploadType=media&name=$objectName"
 EOT;
+        echo "Upload Status: ";
         system($command, $resultCode);
 
         // See https://cloud.google.com/storage/docs/request-endpoints#encoding
         $objectName = $this->_domain . '%2F' . $filename;
 
-        $resourceLink = <<< EOT
-curl -X GET \
--H "Authorization: Bearer {$this->_token}" \
--o $filename \
-"https://storage.googleapis.com/download/storage/v1/b/{$this->_bucket}/o/$objectName?alt=media"
-EOT;
-        echo $resourceLink . "\n\n";
+        $resourceLink = "curl -X GET -H 'Authorization: Bearer {$this->_token}' -o $filename 'https://storage.googleapis.com/download/storage/v1/b/{$this->_bucket}/o/$objectName?alt=media'";
+        echo "\n\033[1;37m\033[32mDownload: {$filename}\n";
+        echo  "\033[33m{$resourceLink}\033[0m\n\n";
     }
 }
 
