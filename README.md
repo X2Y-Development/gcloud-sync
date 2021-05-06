@@ -41,16 +41,19 @@ $ php gcloud-sync
 ```
 
 ```
-Usage:
-    -t      Google Account OAuth2 token
-    -b      Google Cloud Storage bucket name
+Options:
+    -t=token      Google Account OAuth2 token
+    -b=bucket      Google Cloud Storage bucket name
+
+Arguments:
     -c      Sync Magento configuration files
     -a      Sync Magento media assets
     -d      Sync Magento database
-    -m      Sync modules from app/code
-    
+    -m      Sync Magento app/code resources
+    -v      Sync Magento vendor resources
+
 Example:
     php gcloud-sync -c -a -d -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
-
-X2Y Development <dev@x2y.io>
 ```
+
+Development [dev@x2y.io](mailto:dev@x2y.io)
