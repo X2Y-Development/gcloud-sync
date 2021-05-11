@@ -31,7 +31,18 @@ class Sync
     const ASSETS_FILENAME = 'assets.tgz';
     const DATABASE_FILENAME = 'database.sql.bz2';
     const APP_CODE_FILENAME = 'code.tgz';
-    const VEDNOR_FILENAME = 'vendor.tgz';
+    const VENDOR_FILENAME = 'vendor.tgz';
+
+    private $arguments = [];
+    // Options token and bucket name
+    const OPTION_TOKEN  = 't';
+    const OPTION_BUCKET = 'b';
+    // Arguments -c -a -d -m -v
+    const ARGUMENT_CONFIG_FILES = '-c';
+    const ARGUMENT_MEDIA        = '-a';
+    const ARGUMENT_DATABASE     = '-d';
+    const ARGUMENT_APP_CODE     = '-m';
+    const ARGUMENT_VENDOR       = '-v';
 
     // Magento Version
     private $_version;
@@ -52,10 +63,12 @@ class Sync
 
     /**
      * Sync constructor.
+     * @param array $args
      */
-    public function __construct()
+    public function __construct($args)
     {
         try {
+            $this->arguments = $args;
             $this->_initializeMagentoVersion();
             $this->_initializeCredentials();
             $this->_initializeDomain();
@@ -79,7 +92,7 @@ class Sync
         @unlink($filename);
 
         // Remove vendor export
-        $filename = self::VEDNOR_FILENAME;
+        $filename = self::VENDOR_FILENAME;
         @unlink($filename);
 
         // Remove database export
@@ -92,9 +105,9 @@ class Sync
      */
     public function process()
     {
-        $options = getopt(
-            't:c::a::d::b:m:v'
-        );
+        $shortOptBucket = self::OPTION_BUCKET . '::';
+        $shortOptToken = self::OPTION_TOKEN . '::';
+        $options = getopt($shortOptToken . $shortOptBucket);
 
         if (empty($options)) {
             echo <<< EOT
@@ -102,18 +115,20 @@ class Sync
 gcloud-sync is a simple utility that will automatically create a backup of a Magento database, media directory and configuration from a host to Google Cloud Storage.
 
 Get the latest version at https://github.com/X2Y-Development/gcloud-sync
-            
-Usage:
-    -t      Google Account OAuth2 token
-    -b      Google Cloud Storage bucket name
+
+Options:
+    -t=token      Google Account OAuth2 token
+    -b=bucket      Google Cloud Storage bucket name
+
+Arguments:
     -c      Sync Magento configuration files
     -a      Sync Magento media assets
     -d      Sync Magento database
     -m      Sync Magento app/code resources
     -v      Sync Magento vendor resources
 
-Example:
-    php gcloud-sync -c -a -d -m -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME] 
+Usage example:
+    php gcloud-sync -c -a -d -m -v -t=[OAUTH2_TOKEN] -b=[BUCKET_NAME]
 
 X2Y Development <dev@x2y.io>
 
@@ -124,29 +139,29 @@ EOT;
             $message = <<< EOT
    ______________    ____  __  ______     _______  ___   ________
   / ____/ ____/ /   / __ \/ / / / __ \   / ___/\ \/ / | / / ____/
- / / __/ /   / /   / / / / / / / / / /   \__ \  \  /  |/ / / 
-/ /_/ / /___/ /___/ /_/ / /_/ / /_/ /   ___/ /  / / /|  / /___ 
-\____/\____/_____/\____/\____/_____/   /____/  /_/_/ |_/\____/                                                                                  
+ / / __/ /   / /   / / / / / / / / / /   \__ \  \  /  |/ / /
+/ /_/ / /___/ /___/ /_/ / /_/ / /_/ /   ___/ /  / / /|  / /___
+\____/\____/_____/\____/\____/_____/   /____/  /_/_/ |_/\____/
 EOT;
             echo $message . "\n";
         }
 
-        $token = isset($options['t']) ? $options['t'] : null;
-        if (!isset($token)) {
+        $token = isset($options[self::OPTION_TOKEN]) ? $options[self::OPTION_TOKEN] : null;
+        if (is_null($token)) {
             echo "Please provide a valid oauth2 token.\n";
             exit(1);
         }
         $this->_token = $token;
 
-        $bucket = isset($options['b']) ? $options['b'] : null;
-        if (!isset($bucket)) {
+        $bucket = isset($options[self::OPTION_BUCKET]) ? $options[self::OPTION_BUCKET] : null;
+        if (is_null($bucket)) {
             echo "Please provide a valid storage bucket name.\n";
             exit(1);
         }
         $this->_bucket = $bucket;
 
         // Sync Magento configuration, sync composer.* files for magento 2
-        if (isset($options['c'])) {
+        if (in_array(self::ARGUMENT_CONFIG_FILES, $this->arguments)) {
             switch ($this->_version) {
                 // Magento 1
                 case self::M1_VERSION:
@@ -164,27 +179,27 @@ EOT;
         }
 
         // Sync Magento assets
-        if (isset($options['a'])) {
+        if (in_array(self::ARGUMENT_MEDIA, $this->arguments)) {
             $this->_compressAssets();
             $this->_sync(self::ASSETS_FILENAME);
         }
 
         // Sync Magento database
-        if (isset($options['d'])) {
+        if (in_array(self::ARGUMENT_DATABASE, $this->arguments)) {
             $this->_exportDatabase();
             $this->_sync(self::DATABASE_FILENAME);
         }
 
         // Sync Magento app/code directory
-        if (isset($options['m'])) {
+        if (in_array(self::ARGUMENT_APP_CODE, $this->arguments)) {
             $this->_compressAppCode();
             $this->_sync(self::APP_CODE_FILENAME);
         }
 
         // Sync Magento vendor directory
-        if (isset($options['v'])) {
+        if (in_array(self::ARGUMENT_VENDOR, $this->arguments)) {
             $this->_compressVendor();
-            $this->_sync(self::VEDNOR_FILENAME);
+            $this->_sync(self::VENDOR_FILENAME);
         }
     }
 
@@ -266,7 +281,7 @@ EOT;
         $pdo = new PDO($dsn, $this->_username, $this->_password);
 
         $configTable = "{$this->_table_prefix}core_config_data";
-        
+
         $statement = $pdo->prepare("SELECT value FROM {$configTable} WHERE path = :path AND scope = :scope AND scope_id = :scope_id");
         $statement->bindValue(':path', 'web/unsecure/base_url', PDO::PARAM_STR);
         $statement->bindValue(':scope', 'default', PDO::PARAM_STR);
@@ -319,18 +334,15 @@ EOT;
     }
 
     /**
-     * Compress Assets
+     * Compress Vendor
      */
     private function _compressVendor()
     {
-        $filename = self::VEDNOR_FILENAME;
+        $filename = self::VENDOR_FILENAME;
 
-        switch ($this->_version) {
-            // Magento 2
-            case self::M2_VERSION:
-                echo "Compressing Vendor\n";
-                echo system("tar zcf {$filename} vendor/");
-                break;
+        if ($this->_version === self::M2_VERSION) {
+            echo "Compressing Vendor\n";
+            echo system("tar zcf {$filename} vendor/");
         }
     }
 
@@ -383,5 +395,5 @@ EOT;
     }
 }
 
-$sync = new Sync();
+$sync = new Sync($argv);
 $sync->process();
